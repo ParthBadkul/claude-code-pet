@@ -1,0 +1,64 @@
+{
+  "name": "claude-code-pet",
+  "version": "1.0.0",
+  "description": "A desktop companion pet that reacts to Claude Code",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "postinstall": "node scripts/generate-icons.js",
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build": "electron-builder --mac --win"
+  },
+  "dependencies": {
+    "ps-list": "^9.0.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.claudecode.pet",
+    "productName": "Claude Code Pet",
+    "copyright": "MIT",
+    "directories": { "output": "dist" },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**",
+      "assets/**",
+      "node_modules/**",
+      "!scripts/**",
+      "!dist/**"
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": false,
+      "target": [
+        { "target": "dmg",  "arch": ["x64", "arm64"] },
+        { "target": "zip",  "arch": ["x64", "arm64"] }
+      ]
+    },
+    "dmg": {
+      "title": "Claude Code Pet"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "target": [
+        { "target": "nsis",     "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    }
+  }
+}

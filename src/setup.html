@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Name Your Pet</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 360px; height: 320px;
+      background: #110a20;
+      color: #FAF7F0;
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    /* Close button */
+    #close {
+      position: absolute;
+      top: 10px; right: 14px;
+      font-size: 18px;
+      color: #7C3AED;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      line-height: 1;
+    }
+    #close:hover { color: #DA7756; }
+
+    .wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 0;
+      padding: 0 32px;
+    }
+
+    /* Pixel cat preview */
+    #preview {
+      width: 64px; height: 64px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      margin-bottom: 18px;
+      animation: bob 1.2s ease-in-out infinite;
+    }
+
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-4px); }
+    }
+
+    h2 {
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #DA7756;
+      margin-bottom: 6px;
+    }
+
+    p {
+      font-size: 10px;
+      color: #7C3AED;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    input {
+      background: #1e1133;
+      border: 2px solid #7C3AED;
+      color: #FAF7F0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 18px;
+      padding: 8px 14px;
+      text-align: center;
+      width: 200px;
+      letter-spacing: 3px;
+      outline: none;
+      -webkit-app-region: no-drag;
+      transition: border-color 0.15s;
+    }
+    input:focus   { border-color: #DA7756; }
+    input::placeholder { color: #5a3d7a; font-size: 14px; letter-spacing: 1px; }
+
+    button {
+      margin-top: 16px;
+      background: #DA7756;
+      border: none;
+      color: #FAF7F0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      letter-spacing: 3px;
+      padding: 10px 28px;
+      cursor: pointer;
+      text-transform: uppercase;
+      -webkit-app-region: no-drag;
+      transition: background 0.12s;
+    }
+    button:hover  { background: #C4614A; }
+    button:active { transform: scale(0.97); }
+  </style>
+</head>
+<body>
+  <span id="close" title="Close">✕</span>
+
+  <div class="wrap">
+    <canvas id="preview" width="16" height="16"></canvas>
+    <h2>Name Your Pet</h2>
+    <p>What will you call your Claude companion?</p>
+    <input id="name-input" type="text" maxlength="12" placeholder="e.g. Pixel" spellcheck="false" />
+    <button id="btn-go">Let's Go!</button>
+  </div>
+
+  <script>
+    // ── Draw pixel cat on preview canvas ──────────
+    const cv  = document.getElementById('preview');
+    const ctx = cv.getContext('2d');
+
+    const PAL = [null,'#DA7756','#C4614A','#FAF7F0','#2D1B4E','#F9A8A0','#7C3AED','#93C5FD'];
+    const _ = 0, O = 1, D = 2, C = 3, B = 4, K = 5, V = 6;
+    const FRAME = [
+      [_,_,_,D,D,_,_,_,_,_,_,D,D,_,_,_],
+      [_,_,D,O,O,D,_,_,_,_,D,O,O,D,_,_],
+      [_,_,D,K,O,D,_,_,_,_,D,K,O,D,_,_],
+      [_,D,D,D,D,D,D,D,D,D,D,D,D,D,D,_],
+      [_,D,O,O,O,O,O,O,O,O,O,O,O,O,D,_],
+      [_,D,O,C,C,O,O,O,O,O,C,C,O,O,D,_],
+      [_,D,O,V,C,O,O,O,O,O,V,C,O,O,D,_],
+      [_,D,O,C,C,O,O,B,O,O,C,C,O,O,D,_],
+      [_,D,O,O,O,O,O,O,O,O,O,O,O,O,D,_],
+      [_,D,O,C,C,C,C,C,C,C,C,C,C,O,D,_],
+      [_,D,O,C,C,C,C,C,C,C,C,C,C,O,D,_],
+      [_,D,O,O,O,O,O,O,O,O,O,O,O,O,D,_],
+      [_,D,O,D,_,_,O,O,O,O,_,_,D,O,D,_],
+      [_,D,O,D,_,_,O,O,O,O,_,_,D,O,D,_],
+      [_,_,D,D,_,_,D,D,D,D,_,_,D,D,_,_],
+      [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    ];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const c = FRAME[y][x];
+        if (!c) continue;
+        ctx.fillStyle = PAL[c];
+        ctx.fillRect(x, y, 1, 1);
+      }
+
+    // ── Rename mode ───────────────────────────────
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'rename') {
+      document.querySelector('h2').textContent = 'Rename Pet';
+      document.querySelector('p').textContent  = 'Enter a new name for your companion.';
+      document.getElementById('btn-go').textContent = 'Save';
+      const current = decodeURIComponent(params.get('name') || '');
+      if (current) document.getElementById('name-input').value = current;
+    }
+
+    // ── Submission ────────────────────────────────
+    const input = document.getElementById('name-input');
+
+    function submit() {
+      window.petAPI.savePetName(input.value.trim() || 'Claude');
+    }
+
+    document.getElementById('btn-go').addEventListener('click', submit);
+    document.getElementById('close').addEventListener('click',  () => window.petAPI.savePetName(''));
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+
+    input.focus();
+    input.select();
+  </script>
+</body>
+</html>
