@@ -93,7 +93,7 @@ let idleBubbleTimer = null;
 function scheduleIdleBubble() {
   clearTimeout(idleBubbleTimer);
   idleBubbleTimer = setTimeout(() => {
-    if (currentState === STATES.IDLE) {
+    if (currentState === STATES.IDLE && !musicPlaying) {
       showBubble(pick(MSGS.idle), 3000);
     }
     scheduleIdleBubble();
@@ -260,6 +260,7 @@ const STATES = {
   FEEDING:    'feeding',
   DRAGGING:   'dragging',
   DANCING:    'dancing',
+  MUSIC:      'music',     // continuous groove while music plays
 };
 
 let currentState = STATES.IDLE;
@@ -273,6 +274,7 @@ function setState(next) {
 
   if      (next === STATES.PETTING)    drawFrame(FRAMES.happy);
   else if (next === STATES.DANCING)    drawFrame(FRAMES.happy);
+  else if (next === STATES.MUSIC)      drawFrame(FRAMES.happy);
   else if (next === STATES.FEEDING)    drawFrame(FRAMES.happy);
   else if (next === STATES.WORKING)    drawFrame(FRAMES.excited);
   else if (next === STATES.WAVING)     drawFrame(FRAMES.sweat);
@@ -289,7 +291,9 @@ function setState(next) {
 }
 
 function resolveBaseState() {
-  return claudeActive ? STATES.WORKING : STATES.IDLE;
+  if (claudeActive) return STATES.WORKING;
+  if (musicPlaying)  return STATES.MUSIC;
+  return STATES.IDLE;
 }
 
 // ── Escalation timers (driven by Claude detection) ─
@@ -350,6 +354,9 @@ function scheduleBlink() {
         if (currentState === STATES.IDLE || currentState === STATES.HOVER) drawFrame(FRAMES.open);
         scheduleBlink();
       }, 140);
+    } else if (currentState === STATES.MUSIC) {
+      // Skip blink frame during music — keep happy face; just reschedule
+      scheduleBlink();
     } else {
       scheduleBlink();
     }
@@ -363,7 +370,7 @@ const DRAG_THRESHOLD = 3;
 
 canvas.addEventListener('mouseenter', () => {
   window.petAPI.setIgnoreMouse(false);
-  if (![STATES.PETTING, STATES.DRAGGING].includes(currentState)) setState(STATES.HOVER);
+  if (![STATES.PETTING, STATES.DRAGGING, STATES.MUSIC].includes(currentState)) setState(STATES.HOVER);
 });
 
 canvas.addEventListener('mouseleave', () => {
@@ -470,40 +477,88 @@ function feed() {
 }
 
 // ── Music / dancing ────────────────────────────────
-const DANCE_MSGS = ['♪ vibing!', '♫ bop bop!', '🎵', 'feel the beat!', '♪♫♪', 'let\'s dance!'];
+const DANCE_MSGS     = ['♪ vibing!', '♫ bop bop!', '🎵', 'feel the beat!', '♪♫♪', 'let\'s dance!'];
+const MUSIC_OFF_MSGS = ['aww, music stopped…', 'no more beats 😢', '🎵 gone…'];
 let musicPlaying = false;
-let danceTimer   = null;
 
-function dance() {
-  clearTimeout(pettingTimer);
-  clearTimeout(feedingTimer);
-  stopWorkTimers();
-  setState(STATES.DANCING);
-  showBubble(pick(DANCE_MSGS), 2200);
-  setTimeout(() => {
-    setState(resolveBaseState());
-    if (claudeActive) startWorkTimers();
-    window.petAPI.setIgnoreMouse(true);
-  }, 2600);
+// ── Spontaneous music animations (jump / shimmy / pop) ─
+const MUSIC_ANIM_DURATIONS = { jump: 850, shimmy: 720, pop: 950 };
+const MUSIC_ANIM_WEIGHTS = [
+  { name: 'jump',   weight: 40 },
+  { name: 'shimmy', weight: 40 },
+  { name: 'pop',    weight: 20 },
+];
+let musicAnimRunning      = false;
+let musicAnimSchedulerTimer = null;
+
+function pickWeightedMusicAnim() {
+  const total = MUSIC_ANIM_WEIGHTS.reduce((s, a) => s + a.weight, 0);
+  let rand = Math.random() * total;
+  for (const a of MUSIC_ANIM_WEIGHTS) { rand -= a.weight; if (rand <= 0) return a; }
+  return MUSIC_ANIM_WEIGHTS[0];
 }
 
-function scheduleDance() {
-  clearTimeout(danceTimer);
-  danceTimer = setTimeout(() => {
-    if (!musicPlaying) return;
-    if ([STATES.IDLE, STATES.HOVER].includes(currentState)) {
-      dance();
-    }
-    scheduleDance(); // reschedule regardless (skip if busy, try again next window)
-  }, 15000 + Math.random() * 30000);
+function triggerMusicJump() {
+  if (!musicPlaying || currentState !== STATES.MUSIC) return;
+  container.classList.add('music-jump');
+  setTimeout(() => container.classList.remove('music-jump'), 870);
+}
+function triggerMusicShimmy() {
+  if (!musicPlaying || currentState !== STATES.MUSIC) return;
+  container.classList.add('music-shimmy');
+  setTimeout(() => container.classList.remove('music-shimmy'), 740);
+}
+function triggerMusicPop() {
+  if (!musicPlaying || currentState !== STATES.MUSIC) return;
+  container.classList.add('music-pop');
+  setTimeout(() => container.classList.remove('music-pop'), 970);
+}
+
+function scheduleMusicAnim() {
+  if (!musicPlaying || currentState !== STATES.MUSIC) return;
+  const delay = 3500 + Math.random() * 3500;
+  musicAnimSchedulerTimer = setTimeout(() => {
+    if (!musicPlaying || currentState !== STATES.MUSIC) return;
+    if (musicAnimRunning) { scheduleMusicAnim(); return; }
+    const chosen = pickWeightedMusicAnim();
+    musicAnimRunning = true;
+    if (chosen.name === 'jump')   triggerMusicJump();
+    if (chosen.name === 'shimmy') triggerMusicShimmy();
+    if (chosen.name === 'pop')    triggerMusicPop();
+    setTimeout(() => { musicAnimRunning = false; scheduleMusicAnim(); },
+      MUSIC_ANIM_DURATIONS[chosen.name] + 50);
+  }, delay);
+}
+
+function startMusicAnimScheduler() {
+  stopMusicAnimScheduler();
+  musicAnimRunning = false;
+  scheduleMusicAnim();
+}
+
+function stopMusicAnimScheduler() {
+  clearTimeout(musicAnimSchedulerTimer);
+  musicAnimSchedulerTimer = null;
+  musicAnimRunning = false;
+  container.classList.remove('music-jump', 'music-shimmy', 'music-pop');
 }
 
 window.petAPI.onMusicState(playing => {
   musicPlaying = playing;
   if (playing) {
-    scheduleDance();
+    // Only switch to MUSIC state if not busy with Claude work or interaction
+    if ([STATES.IDLE, STATES.HOVER].includes(currentState)) {
+      setState(STATES.MUSIC);
+      showBubble(pick(DANCE_MSGS), 2500);
+    }
+    startMusicAnimScheduler();
   } else {
-    clearTimeout(danceTimer);
+    // Music stopped — return to idle if we were in music state
+    stopMusicAnimScheduler();
+    if (currentState === STATES.MUSIC) {
+      setState(STATES.IDLE);
+      showBubble(pick(MUSIC_OFF_MSGS), 2500);
+    }
   }
 });
 
