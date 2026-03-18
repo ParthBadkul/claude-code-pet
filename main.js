@@ -262,22 +262,24 @@ ipcMain.on('quit-app', () => { app.isQuitting = true; app.quit(); });
 let musicCheckTimer = null;
 let musicWasPlaying = false;
 
-const MUSIC_PS_B64 = Buffer.from(
-  `try {
-  Add-Type -AssemblyName System.Runtime.WindowsRuntime
-  $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
-  $mgr = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync().GetAwaiter().GetResult()
-  $s = $mgr.GetCurrentSession()
-  if ($null -ne $s) { ($s.GetPlaybackInfo().PlaybackStatus -eq 'Playing').ToString().ToLower() } else { 'false' }
-} catch { 'false' }`,
-  'utf16le'
-).toString('base64');
+// Write PS script to a temp file to avoid all shell escaping issues
+const MUSIC_PS_FILE = path.join(app.getPath('temp'), 'claude-pet-music-check.ps1');
+const MUSIC_PS_SCRIPT = [
+  'try {',
+  '  Add-Type -AssemblyName System.Runtime.WindowsRuntime',
+  '  $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]',
+  '  $mgr = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync().GetAwaiter().GetResult()',
+  '  $s = $mgr.GetCurrentSession()',
+  '  if ($null -ne $s) { ($s.GetPlaybackInfo().PlaybackStatus -eq "Playing").ToString().ToLower() } else { "false" }',
+  '} catch { "false" }',
+].join('\r\n');
 
 function startMusicDetection() {
   if (process.platform !== 'win32') return;
+  fs.writeFileSync(MUSIC_PS_FILE, MUSIC_PS_SCRIPT, 'utf8');
   function poll() {
     exec(
-      `powershell -NonInteractive -NoProfile -EncodedCommand ${MUSIC_PS_B64}`,
+      `powershell -NonInteractive -NoProfile -File "${MUSIC_PS_FILE}"`,
       { timeout: 5000 },
       (err, stdout) => {
         const isPlaying = !err && stdout.trim().toLowerCase() === 'true';
@@ -295,6 +297,7 @@ function startMusicDetection() {
 function stopMusicDetection() {
   clearTimeout(musicCheckTimer);
   musicCheckTimer = null;
+  try { fs.unlinkSync(MUSIC_PS_FILE); } catch { /* ignore */ }
 }
 
 // ── App lifecycle ──────────────────────────────────
