@@ -165,6 +165,20 @@
       100% { transform: translateX(-2px); }
     }
 
+    /* ══ DANCING ══ */
+    #pet-container.dancing #pet {
+      animation: dance-spin 2.6s ease-in-out forwards !important;
+    }
+    @keyframes dance-spin {
+      0%   { transform: rotate(  0deg) scale(1);    }
+      12%  { transform: rotate(-22deg) scale(1.07); }
+      26%  { transform: rotate( 24deg) scale(1.07); }
+      38%  { transform: rotate(-16deg) scale(1.03); }
+      50%  { transform: rotate(  0deg) scale(1);    }
+      54%  { transform: rotate(  0deg) scale(1);    }
+      100% { transform: rotate(360deg) scale(1);    }
+    }
+
     /* ══ PETTING ══ */
     #pet-container.petting #pet {
       animation: wiggle 0.55s ease-in-out forwards !important;

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, screen, nativeImage } = require
 const path = require('path');
 const fs   = require('fs');
 const http = require('http');
+const { exec } = require('child_process');
 
 const HOOK_PORT = 7523;
 const BASE_W = 160;
@@ -124,6 +125,7 @@ function createWindow(petName) {
   });
 
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  win.webContents.on('did-finish-load', () => startMusicDetection());
 
   if (process.platform === 'win32') {
     win.setAlwaysOnTop(true, 'screen-saver');
@@ -255,6 +257,46 @@ ipcMain.on('save-settings', (_, data) => {
 
 ipcMain.on('quit-app', () => { app.isQuitting = true; app.quit(); });
 
+// ── Music detection (Windows SMTC) ─────────────────
+// Uses System Media Transport Controls — detects Spotify, browser audio, etc.
+let musicCheckTimer = null;
+let musicWasPlaying = false;
+
+const MUSIC_PS_B64 = Buffer.from(
+  `try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
+  $mgr = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync().GetAwaiter().GetResult()
+  $s = $mgr.GetCurrentSession()
+  if ($null -ne $s) { ($s.GetPlaybackInfo().PlaybackStatus -eq 'Playing').ToString().ToLower() } else { 'false' }
+} catch { 'false' }`,
+  'utf16le'
+).toString('base64');
+
+function startMusicDetection() {
+  if (process.platform !== 'win32') return;
+  function poll() {
+    exec(
+      `powershell -NonInteractive -NoProfile -EncodedCommand ${MUSIC_PS_B64}`,
+      { timeout: 5000 },
+      (err, stdout) => {
+        const isPlaying = !err && stdout.trim().toLowerCase() === 'true';
+        if (isPlaying !== musicWasPlaying) {
+          musicWasPlaying = isPlaying;
+          if (win && !win.isDestroyed()) win.webContents.send('music-state', isPlaying);
+        }
+        musicCheckTimer = setTimeout(poll, 5000);
+      }
+    );
+  }
+  poll();
+}
+
+function stopMusicDetection() {
+  clearTimeout(musicCheckTimer);
+  musicCheckTimer = null;
+}
+
 // ── App lifecycle ──────────────────────────────────
 app.whenReady().then(async () => {
   startHookServer();
@@ -271,4 +313,4 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', e => e.preventDefault()); // keep alive via tray
-app.on('before-quit', () => { if (hookServer) hookServer.close(); });
+app.on('before-quit', () => { if (hookServer) hookServer.close(); stopMusicDetection(); });

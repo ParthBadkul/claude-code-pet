@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   savePetName:      (name) => ipcRenderer.send('save-name', name),
   onPetNameUpdated: (cb)   => ipcRenderer.on('pet-name-updated', (_, name) => cb(name)),
 
+  // Music detection
+  onMusicState: (cb) => ipcRenderer.on('music-state', (_, playing) => cb(playing)),
+
   // Settings window
   getSettings:       ()     => ipcRenderer.invoke('get-settings'),
   saveSettings:      (data) => ipcRenderer.send('save-settings', data),

@@ -259,6 +259,7 @@ const STATES = {
   PETTING:    'petting',
   FEEDING:    'feeding',
   DRAGGING:   'dragging',
+  DANCING:    'dancing',
 };
 
 let currentState = STATES.IDLE;
@@ -271,6 +272,7 @@ function setState(next) {
   currentState = next;
 
   if      (next === STATES.PETTING)    drawFrame(FRAMES.happy);
+  else if (next === STATES.DANCING)    drawFrame(FRAMES.happy);
   else if (next === STATES.FEEDING)    drawFrame(FRAMES.happy);
   else if (next === STATES.WORKING)    drawFrame(FRAMES.excited);
   else if (next === STATES.WAVING)     drawFrame(FRAMES.sweat);
@@ -466,6 +468,44 @@ function feed() {
     window.petAPI.setIgnoreMouse(true);
   }, 950);
 }
+
+// ── Music / dancing ────────────────────────────────
+const DANCE_MSGS = ['♪ vibing!', '♫ bop bop!', '🎵', 'feel the beat!', '♪♫♪', 'let\'s dance!'];
+let musicPlaying = false;
+let danceTimer   = null;
+
+function dance() {
+  clearTimeout(pettingTimer);
+  clearTimeout(feedingTimer);
+  stopWorkTimers();
+  setState(STATES.DANCING);
+  showBubble(pick(DANCE_MSGS), 2200);
+  setTimeout(() => {
+    setState(resolveBaseState());
+    if (claudeActive) startWorkTimers();
+    window.petAPI.setIgnoreMouse(true);
+  }, 2600);
+}
+
+function scheduleDance() {
+  clearTimeout(danceTimer);
+  danceTimer = setTimeout(() => {
+    if (!musicPlaying) return;
+    if ([STATES.IDLE, STATES.HOVER].includes(currentState)) {
+      dance();
+    }
+    scheduleDance(); // reschedule regardless (skip if busy, try again next window)
+  }, 15000 + Math.random() * 30000);
+}
+
+window.petAPI.onMusicState(playing => {
+  musicPlaying = playing;
+  if (playing) {
+    scheduleDance();
+  } else {
+    clearTimeout(danceTimer);
+  }
+});
 
 // ── Boot ───────────────────────────────────────────
 drawFrame(FRAMES.open);
