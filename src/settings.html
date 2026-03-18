@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Settings</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 420px; height: 560px;
+      background: #110a20;
+      color: #FAF7F0;
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    #close {
+      position: absolute;
+      top: 10px; right: 14px;
+      font-size: 18px;
+      color: #7C3AED;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      line-height: 1;
+    }
+    #close:hover { color: #DA7756; }
+
+    .wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      padding: 18px 28px 20px;
+      gap: 0;
+      overflow-y: auto;
+      -webkit-app-region: no-drag;
+    }
+    .wrap::-webkit-scrollbar { width: 4px; }
+    .wrap::-webkit-scrollbar-track { background: transparent; }
+    .wrap::-webkit-scrollbar-thumb { background: #7C3AED; border-radius: 2px; }
+
+    #preview {
+      width: 48px; height: 48px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      margin-bottom: 6px;
+      animation: bob 1.2s ease-in-out infinite;
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-4px); }
+    }
+
+    h2 {
+      font-size: 15px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #DA7756;
+      margin-bottom: 14px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #7C3AED;
+      align-self: flex-start;
+      margin-bottom: 6px;
+      margin-top: 10px;
+    }
+
+    .name-row {
+      display: flex;
+      width: 100%;
+      gap: 0;
+    }
+
+    input[type="text"] {
+      background: #1e1133;
+      border: 2px solid #7C3AED;
+      color: #FAF7F0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 15px;
+      padding: 7px 12px;
+      width: 100%;
+      letter-spacing: 2px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus { border-color: #DA7756; }
+    input[type="text"]::placeholder { color: #5a3d7a; font-size: 12px; letter-spacing: 1px; }
+
+    .sliders {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .slider-label {
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      color: #a78bfa;
+      flex: 1;
+      min-width: 0;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 120px;
+      height: 4px;
+      background: #2D1B4E;
+      border-radius: 2px;
+      outline: none;
+      flex-shrink: 0;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #DA7756;
+      cursor: pointer;
+    }
+    input[type="range"]:focus::-webkit-slider-thumb { background: #C4614A; }
+
+    .slider-val {
+      font-size: 11px;
+      color: #FAF7F0;
+      width: 58px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      width: 100%;
+    }
+
+    button {
+      flex: 1;
+      background: #DA7756;
+      border: none;
+      color: #FAF7F0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12px;
+      letter-spacing: 2px;
+      padding: 12px 0;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background 0.12s;
+    }
+    button:hover  { background: #C4614A; }
+    button:active { transform: scale(0.97); }
+
+    #btn-quit {
+      background: #1e1133;
+      border: 2px solid #DA7756;
+      color: #DA7756;
+    }
+    #btn-quit:hover { background: #2D1B4E; }
+  </style>
+</head>
+<body>
+  <span id="close" title="Close">✕</span>
+
+  <div class="wrap">
+    <canvas id="preview" width="16" height="16"></canvas>
+    <h2>Settings</h2>
+
+    <span class="section-label">Pet Name</span>
+    <div class="name-row">
+      <input id="pet-name" type="text" maxlength="20" placeholder="Claude" spellcheck="false" />
+    </div>
+
+    <span class="section-label">Pet Size</span>
+    <div class="sliders">
+      <div class="slider-row">
+        <span class="slider-label">Scale</span>
+        <input type="range" id="s-petSize" min="50" max="300" step="10" value="100" />
+        <span class="slider-val" id="v-petSize">100%</span>
+      </div>
+    </div>
+
+    <span class="section-label">Animation Timings</span>
+    <div class="sliders">
+      <div class="slider-row">
+        <span class="slider-label">Working → Waving</span>
+        <input type="range" id="s-workingToWaving" min="1000" max="15000" step="500" value="3000" />
+        <span class="slider-val" id="v-workingToWaving">3000ms</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Waving → Frustrated</span>
+        <input type="range" id="s-wavingToFrustrated" min="2000" max="30000" step="1000" value="10000" />
+        <span class="slider-val" id="v-wavingToFrustrated">10000ms</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Idle Message Interval</span>
+        <input type="range" id="s-idleBubbleMin" min="5000" max="60000" step="1000" value="20000" />
+        <span class="slider-val" id="v-idleBubbleMin">20000ms</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Idle Bob Speed</span>
+        <input type="range" id="s-idleBobDuration" min="400" max="4000" step="100" value="1500" />
+        <span class="slider-val" id="v-idleBobDuration">1500ms</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Work Bounce Speed</span>
+        <input type="range" id="s-workBounceDuration" min="100" max="1200" step="20" value="420" />
+        <span class="slider-val" id="v-workBounceDuration">420ms</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Wave Speed</span>
+        <input type="range" id="s-waveAnimDuration" min="80" max="800" step="20" value="220" />
+        <span class="slider-val" id="v-waveAnimDuration">220ms</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Tremble Speed</span>
+        <input type="range" id="s-trembleAnimDuration" min="100" max="1200" step="20" value="400" />
+        <span class="slider-val" id="v-trembleAnimDuration">400ms</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-save">Save Settings</button>
+      <button id="btn-quit">Quit App</button>
+    </div>
+  </div>
+
+  <script>
+    // ── Draw pixel cat ─────────────────────────────
+    const cv  = document.getElementById('preview');
+    const ctx = cv.getContext('2d');
+    const PAL = [null,'#DA7756','#C4614A','#FAF7F0','#2D1B4E','#F9A8A0','#7C3AED','#93C5FD'];
+    const _ = 0, O = 1, D = 2, C = 3, B = 4, K = 5, V = 6;
+    const FRAME = [
+      [_,_,_,D,D,_,_,_,_,_,_,D,D,_,_,_],
+      [_,_,D,O,O,D,_,_,_,_,D,O,O,D,_,_],
+      [_,_,D,K,O,D,_,_,_,_,D,K,O,D,_,_],
+      [_,D,D,D,D,D,D,D,D,D,D,D,D,D,D,_],
+      [_,D,O,O,O,O,O,O,O,O,O,O,O,O,D,_],
+      [_,D,O,C,C,O,O,O,O,O,C,C,O,O,D,_],
+      [_,D,O,V,C,O,O,O,O,O,V,C,O,O,D,_],
+      [_,D,O,C,C,O,O,B,O,O,C,C,O,O,D,_],
+      [_,D,O,O,O,O,O,O,O,O,O,O,O,O,D,_],
+      [_,D,O,C,C,C,C,C,C,C,C,C,C,O,D,_],
+      [_,D,O,C,C,C,C,C,C,C,C,C,C,O,D,_],
+      [_,D,O,O,O,O,O,O,O,O,O,O,O,O,D,_],
+      [_,D,O,D,_,_,O,O,O,O,_,_,D,O,D,_],
+      [_,D,O,D,_,_,O,O,O,O,_,_,D,O,D,_],
+      [_,_,D,D,_,_,D,D,D,D,_,_,D,D,_,_],
+      [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    ];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const c = FRAME[y][x];
+        if (!c) continue;
+        ctx.fillStyle = PAL[c];
+        ctx.fillRect(x, y, 1, 1);
+      }
+
+    // ── Slider live labels ─────────────────────────
+    const SLIDER_KEYS = [
+      'workingToWaving', 'wavingToFrustrated', 'idleBubbleMin',
+      'idleBobDuration', 'workBounceDuration', 'waveAnimDuration', 'trembleAnimDuration',
+    ];
+
+    SLIDER_KEYS.forEach(key => {
+      const slider = document.getElementById('s-' + key);
+      const label  = document.getElementById('v-' + key);
+      slider.addEventListener('input', () => { label.textContent = slider.value + 'ms'; });
+    });
+
+    const sizeSlider = document.getElementById('s-petSize');
+    const sizeLabel  = document.getElementById('v-petSize');
+    sizeSlider.addEventListener('input', () => { sizeLabel.textContent = sizeSlider.value + '%'; });
+
+    // ── Populate from saved settings ───────────────
+    window.petAPI.getSettings().then(s => {
+      document.getElementById('pet-name').value = s.petName || 'Claude';
+      const petSize = s.petSize ?? 100;
+      sizeSlider.value = petSize;
+      sizeLabel.textContent = petSize + '%';
+      const t = s.timings || {};
+      SLIDER_KEYS.forEach(key => {
+        if (t[key] !== undefined) {
+          const slider = document.getElementById('s-' + key);
+          const label  = document.getElementById('v-' + key);
+          slider.value = t[key];
+          label.textContent = t[key] + 'ms';
+        }
+      });
+    });
+
+    // ── Save ──────────────────────────────────────
+    document.getElementById('btn-save').addEventListener('click', () => {
+      const petName = document.getElementById('pet-name').value.trim() || 'Claude';
+      const petSize = parseInt(sizeSlider.value, 10);
+      const timings = {};
+      SLIDER_KEYS.forEach(key => {
+        timings[key] = parseInt(document.getElementById('s-' + key).value, 10);
+      });
+      window.petAPI.saveSettings({ petName, timings, petSize });
+    });
+
+    // ── Quit ──────────────────────────────────────
+    document.getElementById('btn-quit').addEventListener('click', () => {
+      window.petAPI.quitApp();
+    });
+
+    // ── Close ─────────────────────────────────────
+    document.getElementById('close').addEventListener('click', () => window.close());
+
+    document.getElementById('pet-name').focus();
+  </script>
+</body>
+</html>

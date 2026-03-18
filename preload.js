@@ -12,4 +12,10 @@ contextBridge.exposeInMainWorld('petAPI', {
   // Setup window
   savePetName:      (name) => ipcRenderer.send('save-name', name),
   onPetNameUpdated: (cb)   => ipcRenderer.on('pet-name-updated', (_, name) => cb(name)),
+
+  // Settings window
+  getSettings:       ()     => ipcRenderer.invoke('get-settings'),
+  saveSettings:      (data) => ipcRenderer.send('save-settings', data),
+  onSettingsUpdated: (cb)   => ipcRenderer.on('settings-updated', (_, s) => cb(s)),
+  quitApp:           ()     => ipcRenderer.send('quit-app'),
 });

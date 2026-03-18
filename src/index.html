@@ -6,6 +6,16 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    :root {
+      --dur-idle-bob:    1500ms;
+      --dur-work-bounce: 420ms;
+      --dur-wave-anim:   220ms;
+      --dur-tremble:     400ms;
+      --bubble-font-size: 9px;
+      --bubble-max-width: 130px;
+      --bubble-padding:   5px 8px;
+    }
+
     html, body {
       width: 160px;
       height: 185px;
@@ -36,10 +46,10 @@
       border: 2px solid #2D1B4E;
       color: #2D1B4E;
       font-family: 'Courier New', monospace;
-      font-size: 9px;
+      font-size: var(--bubble-font-size);
       letter-spacing: 0.5px;
-      padding: 5px 8px;
-      max-width: 130px;
+      padding: var(--bubble-padding);
+      max-width: var(--bubble-max-width);
       text-align: center;
       line-height: 1.4;
       opacity: 0;
@@ -71,7 +81,7 @@
       position: relative;
       z-index: 2;
       transform-origin: center bottom;
-      animation: idle-bob 1.5s ease-in-out infinite;
+      animation: idle-bob var(--dur-idle-bob) ease-in-out infinite;
     }
 
     /* ══ IDLE ══ */
@@ -82,7 +92,7 @@
 
     /* ══ WORKING ══ */
     #pet-container.working #pet {
-      animation: work-bounce 0.42s ease-in-out infinite;
+      animation: work-bounce var(--dur-work-bounce) ease-in-out infinite;
     }
     @keyframes work-bounce {
       0%, 100% { transform: translateY(0px)  scaleY(1); }
@@ -92,7 +102,7 @@
 
     /* ══ WAVING — anime frantic ══ */
     #pet-container.waving #pet {
-      animation: anime-wave 0.22s ease-in-out infinite;
+      animation: anime-wave var(--dur-wave-anim) ease-in-out infinite;
     }
     @keyframes anime-wave {
       0%   { transform: translateY(-4px) rotate(-20deg) scaleX(0.92); }
@@ -136,7 +146,7 @@
     }
     #pet-container.waving #arm {
       display: block;
-      animation: arm-wave 0.18s steps(3, end) infinite;
+      animation: arm-wave calc(var(--dur-wave-anim) * 0.818) steps(3, end) infinite;
     }
     @keyframes arm-wave {
       0%   { transform: rotate(-50deg); }
@@ -147,7 +157,7 @@
 
     /* ══ FRUSTRATED — gentle tremble only ══ */
     #pet-container.frustrated #pet {
-      animation: anger-tremble 0.4s ease-in-out infinite;
+      animation: anger-tremble var(--dur-tremble) ease-in-out infinite;
     }
     @keyframes anger-tremble {
       0%   { transform: translateX(-2px); }

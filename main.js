@@ -4,11 +4,25 @@ const fs   = require('fs');
 const http = require('http');
 
 const HOOK_PORT = 7523;
+const BASE_W = 160;
+const BASE_H = 185;
 
-let win        = null;
-let setupWin   = null;
-let tray       = null;
-let hookServer = null;
+const DEFAULT_TIMINGS = {
+  workingToWaving:    3000,
+  wavingToFrustrated: 10000,
+  idleBubbleMin:      20000,
+  idleBubbleRandom:   25000,
+  idleBobDuration:    1500,
+  workBounceDuration: 420,
+  waveAnimDuration:   220,
+  trembleAnimDuration:400,
+};
+
+let win         = null;
+let setupWin    = null;
+let settingsWin = null;
+let tray        = null;
+let hookServer  = null;
 
 // ── Hook HTTP server ───────────────────────────────
 // Claude Code hooks POST to http://localhost:7523/event
@@ -48,8 +62,14 @@ function startHookServer() {
 const CONFIG_FILE = path.join(app.getPath('userData'), 'claude-pet-config.json');
 
 function loadConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')); }
-  catch { return {}; }
+  try {
+    const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    return {
+      ...raw,
+      timings: { ...DEFAULT_TIMINGS, ...(raw.timings || {}) },
+      petSize: raw.petSize ?? 100,
+    };
+  } catch { return { timings: { ...DEFAULT_TIMINGS }, petSize: 100 }; }
 }
 
 function saveConfig(data) {
@@ -79,12 +99,16 @@ function makeTrayIcon() {
 // ── Pet window ─────────────────────────────────────
 function createWindow(petName) {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const cfg   = loadConfig();
+  const scale = (cfg.petSize ?? 100) / 100;
+  const winW  = Math.round(BASE_W * scale);
+  const winH  = Math.round(BASE_H * scale);
 
   win = new BrowserWindow({
-    width: 160,
-    height: 185,
-    x: width  - 180,
-    y: height - 200,
+    width:  winW,
+    height: winH,
+    x: width  - winW - 20,
+    y: height - winH - 15,
     frame:       false,
     transparent: true,
     alwaysOnTop: true,
@@ -155,19 +179,16 @@ function showSetupWindow() {
   });
 }
 
-// ── Rename window ───────────────────────────────────
-let renameWin = null;
-
-function showRenameWindow() {
-  if (renameWin && !renameWin.isDestroyed()) { renameWin.focus(); return; }
+// ── Settings window ─────────────────────────────────
+function showSettingsWindow() {
+  if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.focus(); return; }
 
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  const cfg = loadConfig();
 
-  renameWin = new BrowserWindow({
-    width: 360, height: 320,
-    x: Math.round(width  / 2 - 180),
-    y: Math.round(height / 2 - 160),
+  settingsWin = new BrowserWindow({
+    width: 420, height: 560,
+    x: Math.round(width  / 2 - 210),
+    y: Math.round(height / 2 - 280),
     frame: false, transparent: false,
     alwaysOnTop: true, resizable: false,
     webPreferences: {
@@ -176,21 +197,8 @@ function showRenameWindow() {
     },
   });
 
-  const currentName = encodeURIComponent(cfg.petName || 'Claude');
-  renameWin.loadFile(path.join(__dirname, 'src', 'setup.html'), {
-    query: { mode: 'rename', name: currentName },
-  });
-
-  ipcMain.once('save-name', (_, rawName) => {
-    const newName = (rawName || '').trim() || cfg.petName || 'Claude';
-    saveConfig({ ...cfg, petName: newName });
-    ipcMain.removeHandler('get-pet-name');
-    ipcMain.handle('get-pet-name', () => newName);
-    if (win && !win.isDestroyed()) win.webContents.send('pet-name-updated', newName);
-    if (renameWin && !renameWin.isDestroyed()) renameWin.close();
-  });
-
-  renameWin.on('closed', () => { renameWin = null; });
+  settingsWin.loadFile(path.join(__dirname, 'src', 'settings.html'));
+  settingsWin.on('closed', () => { settingsWin = null; });
 }
 
 // ── Tray ───────────────────────────────────────────
@@ -198,10 +206,10 @@ function createTray() {
   tray = new Tray(makeTrayIcon());
   tray.setToolTip('Claude Code Pet');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Show',        click: () => win && win.show() },
-    { label: 'Rename Pet…', click: () => showRenameWindow() },
+    { label: 'Show',       click: () => win && win.show() },
+    { label: 'Settings…',  click: () => showSettingsWindow() },
     { type: 'separator' },
-    { label: 'Quit',        click: () => { app.isQuitting = true; app.quit(); } },
+    { label: 'Quit',       click: () => { app.isQuitting = true; app.quit(); } },
   ]));
 }
 
@@ -216,6 +224,36 @@ ipcMain.on('move-window', (_, { deltaX, deltaY }) => {
   win.setPosition(x + deltaX, y + deltaY);
 });
 ipcMain.on('drag-end', () => {});
+
+// ── IPC: settings ──────────────────────────────────
+ipcMain.handle('get-settings', () => {
+  const cfg = loadConfig();
+  return { petName: cfg.petName || 'Claude', timings: cfg.timings, petSize: cfg.petSize ?? 100 };
+});
+
+ipcMain.on('save-settings', (_, data) => {
+  const cfg     = loadConfig();
+  const newName = (data.petName || '').trim() || cfg.petName || 'Claude';
+  const petSize = Math.max(50, Math.min(300, data.petSize ?? cfg.petSize ?? 100));
+  const newCfg  = { ...cfg, petName: newName, timings: { ...DEFAULT_TIMINGS, ...data.timings }, petSize };
+  saveConfig(newCfg);
+  ipcMain.removeHandler('get-pet-name');
+  ipcMain.handle('get-pet-name', () => newName);
+  if (win && !win.isDestroyed()) {
+    const scale = petSize / 100;
+    const newW  = Math.round(BASE_W * scale);
+    const newH  = Math.round(BASE_H * scale);
+    const [curX, curY] = win.getPosition();
+    const [curW, curH] = win.getSize();
+    win.setPosition(curX + (curW - newW), curY + (curH - newH));
+    win.setSize(newW, newH);
+    win.webContents.send('pet-name-updated', newName);
+    win.webContents.send('settings-updated', { petName: newName, timings: newCfg.timings, petSize });
+  }
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
+});
+
+ipcMain.on('quit-app', () => { app.isQuitting = true; app.quit(); });
 
 // ── App lifecycle ──────────────────────────────────
 app.whenReady().then(async () => {

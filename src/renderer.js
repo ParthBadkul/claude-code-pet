@@ -14,12 +14,52 @@ const canvas    = document.getElementById('pet');
 const ctx       = canvas.getContext('2d');
 const container = document.getElementById('pet-container');
 
+// ── Timings ────────────────────────────────────────
+const DEFAULT_TIMINGS = {
+  workingToWaving:    3000,
+  wavingToFrustrated: 10000,
+  idleBubbleMin:      20000,
+  idleBubbleRandom:   25000,
+  idleBobDuration:    1500,
+  workBounceDuration: 420,
+  waveAnimDuration:   220,
+  trembleAnimDuration:400,
+};
+let timings = { ...DEFAULT_TIMINGS };
+
+function applyTimings(t) {
+  if (!t) return;
+  timings = { ...DEFAULT_TIMINGS, ...t };
+  const r = document.documentElement;
+  r.style.setProperty('--dur-idle-bob',    timings.idleBobDuration + 'ms');
+  r.style.setProperty('--dur-work-bounce', timings.workBounceDuration + 'ms');
+  r.style.setProperty('--dur-wave-anim',   timings.waveAnimDuration + 'ms');
+  r.style.setProperty('--dur-tremble',     timings.trembleAnimDuration + 'ms');
+}
+
+function applySize(petSize) {
+  const scale = (petSize ?? 100) / 100;
+  document.body.style.zoom = scale;
+  // Counter-scale speech bubble so text stays readable at any pet size
+  const r = document.documentElement;
+  r.style.setProperty('--bubble-font-size', (9  / scale).toFixed(1) + 'px');
+  r.style.setProperty('--bubble-max-width', (130 / scale).toFixed(0) + 'px');
+  r.style.setProperty('--bubble-padding',   `${(5 / scale).toFixed(1)}px ${(8 / scale).toFixed(1)}px`);
+}
+
 // ── Pet name ───────────────────────────────────────
 let petName = 'Claude';
-window.petAPI.getPetName().then(name => {
-  petName = name || 'Claude';
+window.petAPI.getSettings().then(s => {
+  petName = s.petName || 'Claude';
+  applyTimings(s.timings);
+  applySize(s.petSize);
 }).catch(() => {});
 window.petAPI.onPetNameUpdated(name => { petName = name || 'Claude'; });
+window.petAPI.onSettingsUpdated(s => {
+  petName = s.petName || 'Claude';
+  applyTimings(s.timings);
+  applySize(s.petSize);
+});
 
 // ── Message library ────────────────────────────────
 const MSGS = {
@@ -57,7 +97,7 @@ function scheduleIdleBubble() {
       showBubble(pick(MSGS.idle), 3000);
     }
     scheduleIdleBubble();
-  }, 20000 + Math.random() * 25000);
+  }, timings.idleBubbleMin + Math.random() * timings.idleBubbleRandom);
 }
 
 // ── Palette ────────────────────────────────────────
@@ -259,8 +299,8 @@ let frustTimer = null;
 function startWorkTimers() {
   clearTimeout(waveTimer);
   clearTimeout(frustTimer);
-  waveTimer  = setTimeout(() => { if (claudeActive) setState(STATES.WAVING);     }, 3000);
-  frustTimer = setTimeout(() => { if (claudeActive) setState(STATES.FRUSTRATED); }, 10000);
+  waveTimer  = setTimeout(() => { if (claudeActive) setState(STATES.WAVING);     }, timings.workingToWaving);
+  frustTimer = setTimeout(() => { if (claudeActive) setState(STATES.FRUSTRATED); }, timings.wavingToFrustrated);
 }
 
 function stopWorkTimers() {
