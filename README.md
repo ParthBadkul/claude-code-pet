@@ -2,7 +2,7 @@
 
 A pixel-art desktop companion that lives on your screen and reacts in real time to what Claude Code is doing. Built with Electron.
 
-![Claude Code Pet](assets/icon.png)
+![Claude Code Pet](screenshots/settings-panel.png)
 
 ---
 
@@ -126,7 +126,7 @@ That's it — the pet will now react every time you use Claude Code.
 | **Left-click** the pet | Petting — wiggle + hearts + speech bubble |
 | **Right-click** the pet | Feeding — chomp + 🐟 particles + speech bubble |
 | **Drag** the pet | Move it anywhere on screen |
-| **Tray icon → Rename Pet…** | Open rename dialog (name used in speech bubbles) |
+| **Tray icon → Settings…** | Open settings panel (name, pet size, animation timings) |
 | **Tray icon → Quit** | Exit the app |
 
 ---
