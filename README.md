@@ -82,40 +82,7 @@ npm start
 
 On first launch a setup window will ask you to name your pet.
 
-**4. Add Claude Code hooks**
-
-Add the following to `~/.claude/settings.json` (create it if it doesn't exist):
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node -e \"try{var h=require('http');var r=h.request({hostname:'127.0.0.1',port:7523,path:'/event',method:'POST',headers:{'Content-Type':'application/json'}},function(){});r.on('error',function(){});r.end('{\\\"type\\\":\\\"prompt_submit\\\"}');}catch(e){}\""
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node -e \"try{var h=require('http');var r=h.request({hostname:'127.0.0.1',port:7523,path:'/event',method:'POST',headers:{'Content-Type':'application/json'}},function(){});r.on('error',function(){});r.end('{\\\"type\\\":\\\"stop\\\"}');}catch(e){}\""
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-> If you already have a `settings.json`, just merge the `hooks` block in.
-
-That's it — the pet will now react every time you use Claude Code.
+That's it — on first launch the pet automatically configures Claude Code hooks in `~/.claude/settings.json`. No manual editing required.
 
 ---
 
