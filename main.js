@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, screen, nativeImage } = require
 const path = require('path');
 const fs   = require('fs');
 const http = require('http');
+const os   = require('os');
 const { exec } = require('child_process');
 
 const HOOK_PORT = 7523;
@@ -257,12 +258,50 @@ ipcMain.on('save-settings', (_, data) => {
 
 ipcMain.on('quit-app', () => { app.isQuitting = true; app.quit(); });
 
-// ── Music detection (Windows SMTC) ─────────────────
-// Uses System Media Transport Controls — detects Spotify, browser audio, etc.
+// ── IPC: hooks management ──────────────────────────
+ipcMain.handle('get-hook-status', () => ({ installed: hooksAreInstalled() }));
+
+ipcMain.handle('install-hooks', () => {
+  try {
+    installClaudeHooks();
+    const cfg = loadConfig();
+    saveConfig({ ...cfg, hooksInstalled: true });
+    return { ok: true, installed: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('uninstall-hooks', () => {
+  try {
+    uninstallClaudeHooks();
+    const cfg = loadConfig();
+    saveConfig({ ...cfg, hooksInstalled: false });
+    return { ok: true, installed: false };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// ── Music detection (cross-platform) ───────────────────────────────────────
+//
+// Windows: PowerShell System Media Transport Controls (SMTC)
+//   — detects Spotify, Chrome, Edge, any registered media session
+// macOS:   Two-tier osascript chain
+//   Tier 1 (AppleScript): Spotify, Apple Music, iTunes — zero dependencies,
+//          works Catalina through Sequoia, ~20–60ms per call
+//   Tier 2 (JXA + ObjC bridge): MediaRemote.framework for browser audio
+//          (Chrome/Safari/Firefox playing YouTube, Spotify Web, etc.)
+//          No CLTs required — JXA's ObjC bridge dlopen()s the dylib directly
+// Other:   Detection disabled, stays false
+//
 let musicCheckTimer = null;
 let musicWasPlaying = false;
 
-// Write PS script to a temp file to avoid all shell escaping issues
+const MUSIC_POLL_MS      = process.platform === 'darwin' ? 3000 : 5000;
+const MUSIC_EXEC_TIMEOUT = process.platform === 'darwin' ? 4000 : 5000;
+
+// ── Windows: PowerShell SMTC script ────────────────
 const MUSIC_PS_FILE = path.join(app.getPath('temp'), 'claude-pet-music-check.ps1');
 const MUSIC_PS_SCRIPT = [
   'try {',
@@ -284,36 +323,206 @@ const MUSIC_PS_SCRIPT = [
   '} catch { "false" }',
 ].join('\r\n');
 
-function startMusicDetection() {
-  if (process.platform !== 'win32') return;
-  fs.writeFileSync(MUSIC_PS_FILE, MUSIC_PS_SCRIPT, 'utf8');
-  function poll() {
-    exec(
-      `powershell -NonInteractive -NoProfile -File "${MUSIC_PS_FILE}"`,
-      { timeout: 5000 },
-      (err, stdout) => {
-        const isPlaying = !err && stdout.trim().toLowerCase() === 'true';
-        if (isPlaying !== musicWasPlaying) {
-          musicWasPlaying = isPlaying;
-          if (win && !win.isDestroyed()) win.webContents.send('music-state', isPlaying);
-        }
-        musicCheckTimer = setTimeout(poll, 5000);
-      }
-    );
+// ── macOS Tier 1: AppleScript multi-app check ──────
+// Each app block wrapped in try/end try — non-running apps throw silently.
+// Covers Spotify, Apple Music, and legacy iTunes (Catalina).
+const MAC_AS_TIER1_CMD = [
+  'osascript',
+  '-e', 'set playing to false',
+  '-e', 'try',
+  '-e', 'tell application "Spotify" to if player state is playing then set playing to true',
+  '-e', 'end try',
+  '-e', 'try',
+  '-e', 'tell application "Music" to if player state is playing then set playing to true',
+  '-e', 'end try',
+  '-e', 'try',
+  '-e', 'tell application "iTunes" to if player state is playing then set playing to true',
+  '-e', 'end try',
+  '-e', 'playing as string',
+].map((tok, i) => i === 0 ? tok : `'${tok}'`).join(' ');
+
+// ── macOS Tier 2: JXA + MediaRemote.framework ──────
+// Covers browser audio: Chrome/Safari/Firefox playing YouTube, Spotify Web, etc.
+// ObjC.import loads MediaRemote.framework via dlopen() — no Xcode CLTs needed,
+// the framework dylib ships with every macOS since 10.8.
+// dispatch_semaphore safely awaits the async callback without CFRunLoopRun risk.
+// kMRMediaRemoteNowPlayingInfoPlaybackRate > 0 means actively playing.
+// Any load failure or missing symbol falls back to 'false'.
+const MAC_JXA_SCRIPT = (
+  "ObjC.import('Foundation');" +
+  "var r='false';" +
+  "try{" +
+    "var b=$.NSBundle.bundleWithPath('/System/Library/PrivateFrameworks/MediaRemote.framework');" +
+    "if(!b.isLoaded){b.load;}" +
+    "var fn=$.MRMediaRemoteGetNowPlayingInfo;" +
+    "if(typeof fn!=='undefined'){" +
+      "var s=$.dispatch_semaphore_create(0);" +
+      "fn($.dispatch_get_global_queue(0,0),function(info){" +
+        "try{" +
+          "if(info&&!info.isNil()){" +
+            "var rate=info.objectForKey('kMRMediaRemoteNowPlayingInfoPlaybackRate');" +
+            "if(rate&&!rate.isNil()&&rate.doubleValue>0){r='true';}" +
+          "}" +
+        "}catch(e){}" +
+        "$.dispatch_semaphore_signal(s);" +
+      "});" +
+      "$.dispatch_semaphore_wait(s,$.DISPATCH_TIME_FOREVER);" +
+    "}" +
+  "}catch(e){}" +
+  "r;"
+);
+const MAC_JXA_TIER2_CMD =
+  `osascript -l JavaScript -e '${MAC_JXA_SCRIPT.replace(/'/g, "'\\''")}'`;
+
+// ── Helper: emit IPC only on state change ──────────
+function emitMusicState(isPlaying) {
+  if (isPlaying !== musicWasPlaying) {
+    musicWasPlaying = isPlaying;
+    if (win && !win.isDestroyed()) win.webContents.send('music-state', isPlaying);
   }
-  poll();
+}
+
+// ── macOS poll: Tier 1 → Tier 2 on false ───────────
+function pollMacOS(poll) {
+  exec(MAC_AS_TIER1_CMD, { timeout: MUSIC_EXEC_TIMEOUT }, (err1, stdout1) => {
+    if (!err1 && stdout1.trim().toLowerCase() === 'true') {
+      emitMusicState(true);
+      musicCheckTimer = setTimeout(poll, MUSIC_POLL_MS);
+      return;
+    }
+    // Tier 1 returned false — check browser audio via JXA
+    exec(MAC_JXA_TIER2_CMD, { timeout: MUSIC_EXEC_TIMEOUT }, (err2, stdout2) => {
+      emitMusicState(!err2 && stdout2.trim().toLowerCase() === 'true');
+      musicCheckTimer = setTimeout(poll, MUSIC_POLL_MS);
+    });
+  });
+}
+
+function startMusicDetection() {
+  if (musicCheckTimer !== null) return; // guard against double-start
+
+  if (process.platform === 'win32') {
+    try { fs.writeFileSync(MUSIC_PS_FILE, MUSIC_PS_SCRIPT, 'utf8'); }
+    catch { return; }
+    function pollWin() {
+      exec(
+        `powershell -NonInteractive -NoProfile -File "${MUSIC_PS_FILE}"`,
+        { timeout: MUSIC_EXEC_TIMEOUT },
+        (err, stdout) => {
+          emitMusicState(!err && stdout.trim().toLowerCase() === 'true');
+          musicCheckTimer = setTimeout(pollWin, MUSIC_POLL_MS);
+        }
+      );
+    }
+    pollWin();
+
+  } else if (process.platform === 'darwin') {
+    function pollMac() { pollMacOS(pollMac); }
+    pollMac();
+  }
+  // Other platforms: silently disabled
 }
 
 function stopMusicDetection() {
   clearTimeout(musicCheckTimer);
   musicCheckTimer = null;
-  try { fs.unlinkSync(MUSIC_PS_FILE); } catch { /* ignore */ }
+  if (process.platform === 'win32') {
+    try { fs.unlinkSync(MUSIC_PS_FILE); } catch { /* ignore */ }
+  }
+  // macOS: no temp file to clean up
+}
+
+// ── Claude Code hook installer ─────────────────────
+const CLAUDE_HOOK_PORT = 7523; // same as HOOK_PORT
+
+function getClaudeSettingsPath() {
+  return path.join(os.homedir(), '.claude', 'settings.json');
+}
+
+function makeHookCmd(type) {
+  if (process.platform === 'win32') {
+    // Single-quoted PS body avoids inner escaping; "" inside cmd double-quotes = literal "
+    return `powershell -NonInteractive -WindowStyle Hidden -Command "Invoke-WebRequest -Uri http://localhost:${CLAUDE_HOOK_PORT}/event -Method POST -ContentType 'application/json' -Body '{""type"":""${type}""}' -UseBasicParsing -ErrorAction SilentlyContinue | Out-Null"`;
+  }
+  return `curl -s -X POST http://localhost:${CLAUDE_HOOK_PORT}/event -H 'Content-Type: application/json' -d '{"type":"${type}"}' 2>/dev/null || true`;
+}
+
+function isOurHook(command) {
+  return typeof command === 'string' && command.includes(`localhost:${CLAUDE_HOOK_PORT}/event`);
+}
+
+function installClaudeHooks() {
+  const settingsPath = getClaudeSettingsPath();
+  const dir = path.dirname(settingsPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')); } catch { /* new file */ }
+  if (!cfg.hooks) cfg.hooks = {};
+
+  const toInstall = [
+    { event: 'PreToolUse',       type: 'pre_tool_use'  },
+    { event: 'Stop',             type: 'stop'          },
+    { event: 'UserPromptSubmit', type: 'prompt_submit' },
+  ];
+
+  let changed = false;
+  for (const { event, type } of toInstall) {
+    if (!cfg.hooks[event]) cfg.hooks[event] = [];
+    const already = cfg.hooks[event].some(e => e.hooks?.some(h => isOurHook(h.command)));
+    if (!already) {
+      cfg.hooks[event].push({ hooks: [{ type: 'command', command: makeHookCmd(type) }] });
+      changed = true;
+    }
+  }
+
+  if (changed) fs.writeFileSync(settingsPath, JSON.stringify(cfg, null, 2), 'utf-8');
+  return changed;
+}
+
+function uninstallClaudeHooks() {
+  const settingsPath = getClaudeSettingsPath();
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')); } catch { return false; }
+  if (!cfg.hooks) return false;
+
+  let changed = false;
+  for (const event of Object.keys(cfg.hooks)) {
+    const before = cfg.hooks[event].length;
+    cfg.hooks[event] = (cfg.hooks[event] || []).filter(
+      e => !e.hooks?.some(h => isOurHook(h.command))
+    );
+    if (cfg.hooks[event].length !== before) changed = true;
+    if (!cfg.hooks[event].length) delete cfg.hooks[event];
+  }
+  if (!Object.keys(cfg.hooks).length) delete cfg.hooks;
+
+  if (changed) fs.writeFileSync(settingsPath, JSON.stringify(cfg, null, 2), 'utf-8');
+  return changed;
+}
+
+function hooksAreInstalled() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(getClaudeSettingsPath(), 'utf-8'));
+    return !!(cfg.hooks?.PreToolUse?.some(e => e.hooks?.some(h => isOurHook(h.command))));
+  } catch { return false; }
 }
 
 // ── App lifecycle ──────────────────────────────────
 app.whenReady().then(async () => {
   startHookServer();
   createTray();
+
+  // Auto-install Claude Code hooks on first launch
+  const appCfg = loadConfig();
+  if (!appCfg.hooksInstalled) {
+    try {
+      installClaudeHooks();
+      saveConfig({ ...appCfg, hooksInstalled: true });
+    } catch (e) {
+      console.warn('[pet] Could not auto-install Claude hooks:', e.message);
+    }
+  }
 
   const cfg = loadConfig();
   if (cfg.petName) {

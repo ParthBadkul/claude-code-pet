@@ -21,4 +21,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   saveSettings:      (data) => ipcRenderer.send('save-settings', data),
   onSettingsUpdated: (cb)   => ipcRenderer.on('settings-updated', (_, s) => cb(s)),
   quitApp:           ()     => ipcRenderer.send('quit-app'),
+  // Hooks management
+  getHookStatus:   ()     => ipcRenderer.invoke('get-hook-status'),
+  installHooks:    ()     => ipcRenderer.invoke('install-hooks'),
+  uninstallHooks:  ()     => ipcRenderer.invoke('uninstall-hooks'),
 });
