@@ -366,7 +366,7 @@ const MAC_JXA_SCRIPT = (
         "}catch(e){}" +
         "$.dispatch_semaphore_signal(s);" +
       "});" +
-      "$.dispatch_semaphore_wait(s,$.DISPATCH_TIME_FOREVER);" +
+      "$.dispatch_semaphore_wait(s,$.dispatch_time(0,2500000000));" + // 2.5s — DISPATCH_TIME_FOREVER is a C macro, not exposed in JXA
     "}" +
   "}catch(e){}" +
   "r;"
